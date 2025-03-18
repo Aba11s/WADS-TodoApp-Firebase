@@ -1,59 +1,86 @@
-import { useState,useEffect } from "react";
+import { useState, useEffect } from "react";
 import TaskList from "../components/TaskList";
 import AddTask from "../components/AddTask";
 import EditTaskModal from "../components/EditTaskModal";
+import { useNavigate } from "react-router-dom";
 
-//firebase
-import { db } from "../firebase";
-import { collection, addDoc, Timestamp, getDocs, doc, updateDoc, deleteDoc} from "firebase/firestore";
+// Firebase
+import { db, auth } from "../firebase";
+import { collection, addDoc, Timestamp, getDocs, doc, updateDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
+import { signOut, onAuthStateChanged } from "firebase/auth";
 
-function App() {
+function TodoPage() {
   const [tasks, setTasks] = useState([]);
   const [taskInput, setTaskInput] = useState("");
   const [editTaskInput, setEditTaskInput] = useState("");
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const navigate = useNavigate();
 
-  // Fetch tasks from firebase
+  // Fetching Tasks
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log("Fetching tasks for user:", user.uid);
+  
         const tasksRef = collection(db, "tasks");
-        const snapshot = await getDocs(tasksRef);
-        const taskList = snapshot.docs.map((doc) => ({
-          id: doc.id, // Use Firestore doc ID as the unique identifier
-          ...doc.data(), // Get task data
-        }));
-        setTasks(taskList); // Update state with fetched tasks
-        
-      } catch (error) {
-        console.error("Error fetching tasks from Firestore:", error);
+        const q = query(tasksRef, where("uid", "==", user.uid)); // Filter by UID
+  
+        const unsubscribeTasks = onSnapshot(q, (snapshot) => {
+          const taskList = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          console.log("Fetched tasks:", taskList); // Debugging
+          setTasks(taskList);
+        });
+  
+        return () => unsubscribeTasks();
+      } else {
+        console.log("User signed out, clearing tasks.");
+        setTasks([]); // Clear tasks on logout
       }
-    };
+    });
+  
+    return () => unsubscribeAuth();
+  }, []);
+  
 
-    fetchTasks();
-  }, []); // Empty dependency array ensures this runs only on component mount
-
+  // Sign Out Function
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      setTasks([]); // Clear tasks on logout
+      navigate("/"); // Redirect to login
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+  
 
   // Add a new task
   const addTask = async () => {
     if (taskInput.trim()) {
+      if (!auth.currentUser) {
+        console.error("No user logged in!");
+        return;
+      }
+  
       try {
-        // Save to Firestore with 'text' field and auto-generated 'id'
         const tasksRef = collection(db, "tasks");
         const docRef = await addDoc(tasksRef, {
           text: taskInput,
-          createdAt: Timestamp.fromDate(new Date()), // Add timestamp
+          createdAt: Timestamp.fromDate(new Date()),
+          uid: auth.currentUser.uid,
         });
-
-        // Update local state with the Firestore document ID
-        const newTask = { id: docRef.id, text: taskInput };  // Use Firestore generated ID
-        setTasks([...tasks, newTask]);
-        setTaskInput(""); // Clear input field
+  
+        setTasks([...tasks, { id: docRef.id, text: taskInput, uid: auth.currentUser.uid }]);
+        setTaskInput("");
       } catch (error) {
         console.error("Cannot add task to Firestore", error);
       }
     }
   };
+  
 
   // Start editing a task
   const startEditingTask = (taskId) => {
@@ -64,24 +91,20 @@ function App() {
 
   // Save the edited task
   const saveEditedTask = async () => {
-    // Update local state
     setTasks(
       tasks.map((task) =>
         task.id === editingTaskId ? { ...task, text: editTaskInput } : task
       )
     );
 
-    // Update Firestore
-    const taskRef = doc(db, "tasks", editingTaskId); // Get Firestore document reference
     try {
-      await updateDoc(taskRef, {
-        text: editTaskInput, // Update the task text in Firestore
+      await updateDoc(doc(db, "tasks", editingTaskId), {
+        text: editTaskInput,
       });
     } catch (error) {
       console.error("Error updating task in Firestore:", error);
     }
 
-    // Clear editing state
     setEditingTaskId(null);
     setEditTaskInput("");
   };
@@ -94,22 +117,26 @@ function App() {
 
   // Delete a task
   const deleteTask = async (taskId) => {
-    // Remove from local state
     setTasks(tasks.filter((task) => task.id !== taskId));
 
-    // Delete from Firestore
-    const taskRef = doc(db, "tasks", taskId); // Get Firestore document reference
     try {
-      await deleteDoc(taskRef); // Delete task from Firestore
+      await deleteDoc(doc(db, "tasks", taskId));
     } catch (error) {
       console.error("Error deleting task from Firestore:", error);
     }
   };
 
-
   return (
-    <div className="min-h-screen w-screen bg-blue-200 flex justify-center items-center">
-      {/* Main container */}
+    <div className="min-h-screen w-screen bg-blue-200 flex flex-col justify-center items-center">
+      {/* Sign Out Button */}
+      <button
+        onClick={handleSignOut}
+        className="absolute top-4 right-4 bg-red-500 text-white px-4 py-2 rounded"
+      >
+        Sign Out
+      </button>
+
+      {/* Main Container */}
       <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl">
         <h1 className="text-xl font-semibold mb-4 text-center">Tasks</h1>
 
@@ -132,4 +159,4 @@ function App() {
   );
 }
 
-export default App;
+export default TodoPage;

@@ -1,12 +1,24 @@
-// App.jsx
-import React from "react";
-import TodoPage from "./pages/TodoPage";  // Import TodoPage from the pages folder
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { auth } from "./firebase";
+import LoginPage from "./pages/LoginPage";
+import TodoPage from "./pages/TodoPage";
 
 function App() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => setUser(user));
+    return () => unsubscribe();
+  }, []);
+
   return (
-    <div>
-      <TodoPage />  {/* Render TodoPage component */}
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={user ? <Navigate to="/todo" /> : <LoginPage />} />
+        <Route path="/todo" element={user ? <TodoPage /> : <Navigate to="/" />} />
+      </Routes>
+    </Router>
   );
 }
 
