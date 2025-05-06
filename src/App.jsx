@@ -1,22 +1,15 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { auth } from "./firebase";
-import LoginPage from "./pages/LoginPage";
-import TodoPage from "./pages/TodoPage";
+import { useState } from "react";  // Removed auth useEffect
+import TodoPage from "./pages/TodoPage";  // Directly import TodoPage without LoginPage
 
 function App() {
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => setUser(user));
-    return () => unsubscribe();
-  }, []);
-
+  // Directly skip the user state and navigate to TodoPage
   return (
     <Router>
       <Routes>
-        <Route path="/" element={user ? <Navigate to="/todo" /> : <LoginPage />} />
-        <Route path="/todo" element={user ? <TodoPage /> : <Navigate to="/" />} />
+        {/* Directly render TodoPage without checking for auth */}
+        <Route path="/" element={<TodoPage />} />
+        <Route path="/todo" element={<TodoPage />} />
       </Routes>
     </Router>
   );
